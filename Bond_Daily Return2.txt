@@ -1,0 +1,86 @@
+1- Accrued coupon
+
+Create and modify variables:
+i
+	1.1 create	ncoups = INTEREST_FREQUENCY
+					if (INTEREST_FREQUENCY ==14) ---> ncoups = 6
+					if (INTEREST_FREQUENCY > 14) ---> ncoups = 0
+	
+	1.2 modify	if (FIRST_INTEREST_DATE == NA) ---> FIRST_INTEREST_DATE = OFFERING_DATE
+	
+	1.3 modify	if (LAST_INTEREST_DATE  == NA) ---> LAST_INTEREST_DATE  = MATURITY
+	
+	1.4 create	coupmonth = months that has passed since FIRST_INTEREST_DATE
+		
+		Note: Difference between last day of January and first day of Febuary is 1 month.
+		
+	1.5 create	date_of_last_coup = date at which last coupon has been paid
+					
+					if date < FIRST_INTEREST_DATE & (OFFERING_DATE < date) ---> date_of_last_coup = OFFERING_DATE
+					Note: I believe the above (WRDS) is not correct but the below is:
+					if (date < FIRST_INTEREST_DATE) ---> date_of_last_coup = DATED_DATE
+
+					
+	1.6 create	days	= days since date_of_last_coup
+					
+				Note: For computing days, the below is used (since day_basis is 30/360):
+					
+				D2 <- day(date)
+				D1 <- day(date_of_last_coup)
+					  
+				M2 <- month(date)
+				M1 <- month(date_of_last_coup)
+					  
+				Y2 <- year(date)
+				Y1 <- year(date_of_last_coup)
+					  
+				D1 <- if_else(D1==31 , 30 , D1 , NA)
+				D2 <- if_else(D2==31 & D1==30 , 30 , D2 , NA)
+				D1 <- if_else(M1==2 & (D1==28 & D1==29) , 30 , D1 ,  NA)
+					  
+				days <- 360*(Y2 - Y1) + 30*(M2 - M1) + (D2 - D1)
+					  
+				Source:
+				https://people.duke.edu/~charvey/Classes/ba350_1997/pricing/daycount.htm
+					
+					
+	1.7 create	coupacc = coupon* days/360
+	
+	1.8 create	coupamt = (coupon/ncoups)*( date == date_of_last_coup)
+					Note: That means, coupamt has value only on dates which coupon is paid.
+					
+	
+	1.9 modify	Robustness steps:bind
+					
+					if date > MATURITY	| date < OFFERING_DATE	---> coupamt = coupacc = 0
+					if ncoups == 0					---> coupamt = coupacc = 0
+					
+					Note:
+					I think the correct version should be:
+					if date > MATURITY	| date < DATED_DATE	---> coupamt = coupacc = 0
+					
+	1.10 create	cumsum_coupamt = CumulativeSum(coupamt)
+						
+								
+
+2- Return calculation:
+		
+	2.1 Drop all variables except:
+	
+		cusip
+		date
+		bid_price
+		offer_price
+		coupacc
+		cumsum_coupamt
+		
+	2.2 Compute Ret_{t , t+n}
+	
+		Ret_{t , t+n} = [nominator] / [denominator]
+		
+		nominator 	=   	(Price_{t+n} 		- Price_{t})  +
+					(coupacc{t+n} 		- coupacc{t}) +
+					(cumsum_coupamt{t+n} 	- cumsum_coupamt{t})
+					
+		denominator = Price_{t} + coupacc{t}
+
